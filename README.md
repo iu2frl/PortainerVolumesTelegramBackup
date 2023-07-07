@@ -18,3 +18,7 @@ This script scans the usual Docker Volumes path, compresses them to .tar.gz arch
 2. Build the image with `sudo docker build . -t docker-backup:latest`
 3. Create a `.env` file with the environment variables (one per each line)
 4. Execute the image with `sudo docker run --env-file=.env -v /var/lib/docker/volumes:/root/backup -it docker-backup` making sure to map the proper physical folder to `/root/backup`
+
+## Image from Docker Hub
+
+Link: [iu2frl/portainer-volumes-telegram-backup/general](https://hub.docker.com/repository/docker/iu2frl/portainer-volumes-telegram-backup/general)
