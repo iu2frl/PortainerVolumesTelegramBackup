@@ -101,7 +101,11 @@ if __name__ == '__main__':
                         logging.error("Error while deleting: [" + retEx + "]")
                 else:
                     logging.error("Cannot compress: [" + outputPath + "]")
-    # Send log file
-    bot.send_document(BOT_DEST, open(logFile, 'rb'))
+    try:
+        # Send log file
+        bot.send_document(BOT_DEST, open(logFile, 'rb'))
+        logging.debug("Backup file sent")
+    except Exception as retEx:
+        logging.error("Error while sending log file: [" + str(retEx) + "]")
     # Done, bye!
     logging.info("Completed!")
