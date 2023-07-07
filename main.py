@@ -4,7 +4,8 @@ from datetime import datetime
 import tarfile
 import telebot
 
-logging.basicConfig(level=logging.DEBUG)
+logFile = "/tmp/" + datetime.now().strftime("%Y%m%d_%H%M%S") + ".txt"
+logging.basicConfig(filename=logFile, level=logging.DEBUG)
 
 BOT_TOKEN: str = os.environ.get('BOT_TOKEN')
 if (not BOT_TOKEN):
@@ -23,6 +24,13 @@ else:
     logging.debug("BOT_TOKEN: [" + str(BOT_DEST) + "]")
 
 bot = telebot.TeleBot(BOT_TOKEN)
+
+# Custom message to send before files list
+CUST_MSG: str = os.environ.get('CUST_MSG')
+if (not CUST_MSG):
+    CUST_MSG = "Backup at " + datetime.now().strftime("%Y%m%d_%H%M%S")
+else:
+    CUST_MSG += "\n\nBackup at " + datetime.now().strftime("%Y%m%d_%H%M%S")
 
 # Get volumes root path
 ROOT_DIR: str = os.environ.get('ROOT_DIR')
@@ -53,6 +61,8 @@ def MakeTar(source_dir, output_filename):
         return False
 
 if __name__ == '__main__':
+    # Send custom message
+    bot.send_message(BOT_DEST, CUST_MSG)
     # Create temporary output path
     if not os.path.exists(TMP_DIR):
         logging.info("Creating: [" + TMP_DIR + "] folder")
@@ -91,5 +101,7 @@ if __name__ == '__main__':
                         logging.error("Error while deleting: [" + retEx + "]")
                 else:
                     logging.error("Cannot compress: [" + outputPath + "]")
+    # Send log file
+    bot.send_document(BOT_DEST, open(logFile, 'rb'))
     # Done, bye!
     logging.info("Completed!")
