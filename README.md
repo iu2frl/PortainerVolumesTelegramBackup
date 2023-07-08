@@ -28,3 +28,18 @@ Link: [iu2frl/portainer-volumes-telegram-backup/general](https://hub.docker.com/
 You can map as many elements of the `ROOT_DIR` as you wish, for example:
 - Environment: `ROOT_DIR=/root/backup/`
 - Volumes: `-v /local/volume/path:/root/backup/someService -v /local/other/volume:/root/backup/someOtherService`
+
+# Crontab example
+
+This example creates a backup of everything in `/var/snap/docker/common/var-lib-docker/volumes` plus `/home/iu2frl/guacamole` every Sunday at 2am, execution log is sent to `/tmp/port-backup-log.txt`
+
+```bash
+# For example, you can run a backup of all your user accounts
+# at 5 a.m every week with:
+# 0 5 * * 1 tar -zcf /var/backups/home.tgz /home/
+# 
+# For more information see the manual pages of crontab(5) and cron(8)
+# 
+# m h  dom mon dow   command
+0 2 * * Sun docker run -itd -v /var/snap/docker/common/var-lib-docker/volumes:/root/backup -v /home/ubuntu/guacamole:/root/backup/guacamole --env-file=/home/iu2frl/portainer-backup.env --rm iu2frl/portainer-volumes-telegram-backup:latest > /tmp/port-backup-log.txt 2>&1
+```
