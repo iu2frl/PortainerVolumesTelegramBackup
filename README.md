@@ -22,3 +22,9 @@ This script scans the usual Docker Volumes path, compresses them to .tar.gz arch
 ## Image from Docker Hub
 
 Link: [iu2frl/portainer-volumes-telegram-backup/general](https://hub.docker.com/repository/docker/iu2frl/portainer-volumes-telegram-backup/general)
+
+## What if i have multiple volume paths?
+
+You can map as many elements of the `ROOT_DIR` as you wish, for example:
+- Environment: `ROOT_DIR=/root/backup/`
+- Volumes: `-v /local/volume/path:/root/backup/someService -v /local/other/volume:/root/backup/someOtherService`
