@@ -12,6 +12,7 @@ load_dotenv()
 try:
     log_file_name = datetime.now().strftime("%Y%m%d_%H%M%S") + ".txt"
     logging.basicConfig(filename=f"/tmp/{log_file_name}", level=logging.DEBUG)
+    log_file_name = f"/tmp/{log_file_name}"
 except Exception as retEx:
     logging.error("Cannot create log file: [%s]. Defaulting to current folder", str(retEx))
     logging.basicConfig(filename=log_file_name, level=logging.DEBUG)
@@ -157,7 +158,7 @@ if __name__ == '__main__':
                     logging.error("Cannot compress: [" + outputPath + "]")
     try:
         # Send log file
-        bot.send_document(TELEGRAM_DEST_CHAT, open(logFile, 'rb'))
+        bot.send_document(TELEGRAM_DEST_CHAT, open(log_file_name, 'rb'))
         logging.debug("Backup file sent")
     except Exception as retEx:
         logging.error("Error while sending log file: [" + str(retEx) + "]")

@@ -44,7 +44,7 @@ This example creates a backup of everything in `/var/snap/docker/common/var-lib-
 # For more information see the manual pages of crontab(5) and cron(8)
 # 
 # m h  dom mon dow   command
-0 2 * * Sun docker run -itd -v /var/lib/docker/volumes:/root/backup --env-file=/home/iu2frl/portainer-backup.env --rm --pull=always iu2frl/portainer-volumes-telegram-backup:latest > /tmp/port-backup-log.txt 2>&1
+0 2 * * Sun docker run -itd -v /var/lib/docker/volumes:/root/backup:ro --env-file=/home/iu2frl/portainer-backup.env --rm --pull=always iu2frl/portainer-volumes-telegram-backup:latest > /tmp/port-backup-log.txt 2>&1
 ```
 
 ## Environment file example
