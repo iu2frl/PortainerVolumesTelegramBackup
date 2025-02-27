@@ -1,3 +1,4 @@
 portainervolumestelegrambackup/*
 venv/*
-.env
+*.env
+*.txt

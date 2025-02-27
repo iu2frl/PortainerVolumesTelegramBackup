@@ -4,9 +4,17 @@ from datetime import datetime
 import tarfile
 import telebot
 import requests
+from dotenv import load_dotenv
 
-logFile = "/tmp/" + datetime.now().strftime("%Y%m%d_%H%M%S") + ".txt"
-logging.basicConfig(filename=logFile, level=logging.DEBUG)
+# Load environment variables from .env file if it exists
+load_dotenv()
+
+try:
+    log_file_name = datetime.now().strftime("%Y%m%d_%H%M%S") + ".txt"
+    logging.basicConfig(filename=f"/tmp/{log_file_name}", level=logging.DEBUG)
+except Exception as retEx:
+    logging.error("Cannot create log file: [%s]. Defaulting to current folder", str(retEx))
+    logging.basicConfig(filename=log_file_name, level=logging.DEBUG)
 
 TELEGRAM_API_TOKEN: str = os.environ.get('BOT_TOKEN')
 if not TELEGRAM_API_TOKEN:
@@ -41,7 +49,8 @@ if not DOCKER_VOLUME_DIRECTORIES:
     logging.warning("ROOT_DIR is empty, falling back to default path(s): %s", DOCKER_VOLUME_DIRECTORIES)
 else:
     # Get directories from environment
-    DOCKER_VOLUME_DIRECTORIES = [str(x).split() for x in DOCKER_VOLUME_DIRECTORIES.split(",")]
+    DOCKER_VOLUME_DIRECTORIES = [str(x).strip() for x in DOCKER_VOLUME_DIRECTORIES.split(",")]
+    logging.debug("ROOT_DIR: [%s]", DOCKER_VOLUME_DIRECTORIES)
 
 # Get temporary path
 TMP_DIR: str = os.environ.get('TMP_DIR')
@@ -49,6 +58,12 @@ if not TMP_DIR:
     TMP_DIR = "/tmp"
     logging.warning("TMP_DIR is empty, falling back to default path: [%s]", TMP_DIR )
 TMP_DIR = os.path.join(TMP_DIR, datetime.now().strftime("%Y%m%d_%H%M%S"))
+if not os.path.exists(TMP_DIR):
+    try:
+        os.mkdir(TMP_DIR)
+    except Exception as retEx:
+        logging.error("Cannot create temporary folder: [%s]. Defaulting to current folder", str(retEx))
+        TMP_DIR = os.getcwd()
 logging.debug("TMP_DIR: [%s]", TMP_DIR)
 
 PORTAINER_API_URL = os.environ.get('BACKUP_API_URL')
@@ -78,34 +93,25 @@ def MakeTar(source_dir, output_filename):
 
 # Function to request Portainer backup
 def request_portainer_backup(api_url, api_key, output_file):
-    headers = {
-        "X-API-Key": api_key,
-        "Content-Type": "application/json; charset=utf-8"
-    }
-    data = {
-        "password": ""
-    }
-    response = requests.post(api_url, headers=headers, json=data, verify=False, timeout=10)
-    if response.status_code == 200:
-        with open(output_file, 'wb') as f:
-            f.write(response.content)
-        logging.info("Portainer backup saved to: [%s]", output_file)
-        return True
-    else:
-        logging.error("Failed to request Portainer backup: [%s]", response.text)
-        return False
-
-# Function to send Portainer backup to Telegram
-def send_portainer_backup_to_telegram(bot_token, chat_id, file_path):
-    url = f"https://api.telegram.org/bot{bot_token}/sendDocument"
-    files = {'document': open(file_path, 'rb')}
-    data = {'chat_id': chat_id}
-    response = requests.post(url, files=files, data=data, timeout=10)
-    if response.status_code == 200:
-        logging.info("Portainer backup sent to Telegram successfully")
-        return True
-    else:
-        logging.error("Failed to send Portainer backup to Telegram: [%s]", response.text)
+    try:
+        headers = {
+            "X-API-Key": api_key,
+            "Content-Type": "application/json; charset=utf-8"
+        }
+        data = {
+            "password": ""
+        }
+        response = requests.post(api_url, headers=headers, json=data, verify=False, timeout=10)
+        if response.status_code == 200:
+            with open(output_file, 'wb') as f:
+                f.write(response.content)
+            logging.info("Portainer backup saved to: [%s]", output_file)
+            return True
+        else:
+            logging.error("Failed to request Portainer backup: [%s]", response.text)
+            return False
+    except Exception as e:
+        logging.error("Failed to request Portainer backup: [%s]", str(e))
         return False
 
 if __name__ == '__main__':
@@ -158,8 +164,9 @@ if __name__ == '__main__':
 
     # Request and send Portainer backup
     if request_portainer_backup(PORTAINER_API_URL, PORTAINER_API_KEY, PORTAINER_BACKUP_FILE):
-        send_portainer_backup_to_telegram(TELEGRAM_API_TOKEN, TELEGRAM_DEST_CHAT, PORTAINER_BACKUP_FILE)
+        bot.send_document(TELEGRAM_DEST_CHAT, open(PORTAINER_BACKUP_FILE, 'rb'))
     else:
+        bot.send_message(TELEGRAM_DEST_CHAT, "Failed to request Portainer backup")
         logging.error("Failed to request Portainer backup")
 
     # Done, bye!
