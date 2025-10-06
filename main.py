@@ -10,17 +10,17 @@ from dotenv import load_dotenv
 load_dotenv()
 
 try:
-    log_file_name = datetime.now().strftime("%Y%m%d_%H%M%S") + ".txt"
-    logging.basicConfig(filename=f"/tmp/{log_file_name}", level=logging.DEBUG)
-    log_file_name = f"/tmp/{log_file_name}"
+    LOG_FILE_NAME = datetime.now().strftime("%Y%m%d_%H%M%S") + ".txt"
+    logging.basicConfig(filename=f"/tmp/{LOG_FILE_NAME}", level=logging.DEBUG)
+    LOG_FILE_NAME = f"/tmp/{LOG_FILE_NAME}"
 except Exception as retEx:
     logging.error("Cannot create log file: [%s]. Defaulting to current folder", str(retEx))
-    logging.basicConfig(filename=log_file_name, level=logging.DEBUG)
+    logging.basicConfig(filename=LOG_FILE_NAME, level=logging.DEBUG)
 
 TELEGRAM_API_TOKEN: str = os.environ.get('BOT_TOKEN')
 if not TELEGRAM_API_TOKEN:
     logging.critical("Input token is empty!")
-    raise Exception("Invalid BOT_TOKEN")
+    raise ValueError("Invalid BOT_TOKEN")
 else:
     logging.debug("BOT_TOKEN length: [%s]", len(TELEGRAM_API_TOKEN))
 
@@ -28,7 +28,7 @@ else:
 TELEGRAM_DEST_CHAT: str = os.environ.get('BOT_DEST')
 if not TELEGRAM_DEST_CHAT:
     logging.critical("Destination chat is empty!")
-    raise Exception("Invalid BOT_DEST")
+    raise ValueError("Invalid BOT_DEST")
 else:
     TELEGRAM_DEST_CHAT: int = int(TELEGRAM_DEST_CHAT)
     logging.debug("BOT_DEST: [%s]", TELEGRAM_DEST_CHAT)
@@ -70,13 +70,13 @@ logging.debug("TMP_DIR: [%s]", TMP_DIR)
 PORTAINER_API_URL = os.environ.get('BACKUP_API_URL')
 if not PORTAINER_API_URL:
     logging.critical("PORTAINER_API_URL is empty!")
-    raise Exception("Invalid PORTAINER_API_URL")
+    raise ValueError("Invalid PORTAINER_API_URL")
 logging.debug("PORTAINER_API_URL: [%s]", PORTAINER_API_URL)
 
 PORTAINER_API_KEY = os.environ.get('API_KEY')
 if not PORTAINER_API_KEY:
     logging.critical("API_KEY is empty!")
-    raise Exception("Invalid API_KEY")
+    raise ValueError("Invalid API_KEY")
 logging.debug("API_KEY length: [%s]", len(PORTAINER_API_KEY))
 
 PORTAINER_BACKUP_FILE = os.path.join(TMP_DIR, "portainer_backup.tar.gz")
@@ -89,11 +89,12 @@ def MakeTar(source_dir, output_filename):
         with tarfile.open(output_filename, "w:gz") as tar:
             tar.add(source_dir, arcname=os.path.basename(source_dir))
         return True
-    except:
+    except Exception as ret_exc:
+        logging.error("Failed to compress [%s] to [%s]: [%s]", source_dir, output_filename, str(ret_exc))
         return False
 
-# Function to request Portainer backup
 def request_portainer_backup(api_url, api_key, output_file):
+    """Request a backup from Portainer and save it to output_file"""
     try:
         headers = {
             "X-API-Key": api_key,
@@ -148,6 +149,7 @@ if __name__ == '__main__':
                         logging.debug("Document: [" + outputPath + "] was sent succesfully")
                     except Exception as retEx:
                         logging.error("Cannot send document: [" + str(retEx) + "]")
+                        bot.send_message(TELEGRAM_DEST_CHAT, "Cannot send document `" + outputPath + "`: [" + str(retEx) + "]")
                     # Delete archive
                     try:
                         os.remove(outputPath)
@@ -158,7 +160,7 @@ if __name__ == '__main__':
                     logging.error("Cannot compress: [" + outputPath + "]")
     try:
         # Send log file
-        bot.send_document(TELEGRAM_DEST_CHAT, open(log_file_name, 'rb'))
+        bot.send_document(TELEGRAM_DEST_CHAT, open(LOG_FILE_NAME, 'rb'))
         logging.debug("Backup file sent")
     except Exception as retEx:
         logging.error("Error while sending log file: [" + str(retEx) + "]")
