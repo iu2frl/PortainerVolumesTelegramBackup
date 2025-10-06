@@ -121,49 +121,52 @@ if __name__ == '__main__':
     bot.send_message(TELEGRAM_DEST_CHAT, TELEGRAM_BACKUP_MESSAGE)
     # Create temporary output path
     if not os.path.exists(TMP_DIR):
-        logging.info("Creating: [" + TMP_DIR + "] folder")
+        logging.info("Creating: [%s] folder", TMP_DIR)
         os.mkdir(TMP_DIR)
     else:
-        logging.warning("Folder: [" + TMP_DIR + "] already exists, this could cause some troubles")
+        logging.warning("Folder: [%s] already exists, this could cause some troubles", TMP_DIR)
     # Process path(s) list
     for singleLocation in DOCKER_VOLUME_DIRECTORIES:
         try:
             # Check if we can access that folder
             subFolders = os.listdir(singleLocation)
         except FileNotFoundError:
-            logging.warning("Cannot access path: [" + singleLocation + "]")
+            logging.warning("Cannot access path: [%s]", singleLocation)
             continue
         # If the path exists
         for singleSubfolder in subFolders:
             folderToCompress = os.path.join(singleLocation, singleSubfolder)
             # Check if it is a folder
             if os.path.isdir(folderToCompress):
-                logging.debug("Found valid folder: " + folderToCompress)
+                logging.debug("Found valid folder: %s", folderToCompress)
                 archiveName = singleSubfolder + "-" + datetime.now().strftime("%Y%m%d_%H%M%S") + ".tar.gz"
                 outputPath = os.path.join(TMP_DIR, archiveName)
                 if (MakeTar(folderToCompress, outputPath)):
-                    logging.info("Succesfully compressed: [" + outputPath + "]")
+                    logging.info("Succesfully compressed: [%s]", outputPath)
                     # Send archive
                     try:
                         bot.send_document(TELEGRAM_DEST_CHAT, open(outputPath, 'rb'))
-                        logging.debug("Document: [" + outputPath + "] was sent succesfully")
+                        logging.debug("Document: [%s] was sent succesfully", outputPath)
                     except Exception as retEx:
-                        logging.error("Cannot send document: [" + str(retEx) + "]")
-                        bot.send_message(TELEGRAM_DEST_CHAT, "Cannot send document `" + outputPath + "`: [" + str(retEx) + "]")
+                        logging.error("Cannot send document: [%s]", retEx)
+                        try:
+                            bot.send_message(TELEGRAM_DEST_CHAT, "Cannot send document `" + outputPath + "`: [" + str(retEx) + "]")
+                        except Exception as sendEx:
+                            logging.error("Failed to send error message: [%s]", sendEx)
                     # Delete archive
                     try:
                         os.remove(outputPath)
-                        logging.debug("File: [" + outputPath + "] was deleted succesfully")
+                        logging.debug("File: [%s] was deleted succesfully", outputPath)
                     except Exception as retEx:
-                        logging.error("Error while deleting: [" + retEx + "]")
+                        logging.error("Error while deleting: [%s]", retEx)
                 else:
-                    logging.error("Cannot compress: [" + outputPath + "]")
+                    logging.error("Cannot compress: [%s]", outputPath)
     try:
         # Send log file
         bot.send_document(TELEGRAM_DEST_CHAT, open(LOG_FILE_NAME, 'rb'))
         logging.debug("Backup file sent")
     except Exception as retEx:
-        logging.error("Error while sending log file: [" + str(retEx) + "]")
+        logging.error("Error while sending log file: [%s]", retEx)
 
     # Request and send Portainer backup
     if request_portainer_backup(PORTAINER_API_URL, PORTAINER_API_KEY, PORTAINER_BACKUP_FILE):
