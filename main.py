@@ -86,7 +86,7 @@ logging.debug("PORTAINER_BACKUP_FILE: [%s]", PORTAINER_BACKUP_FILE)
 def MakeTar(source_dir, output_filename):
     logging.debug("Compressing: [%s] to: [%s]", source_dir, output_filename)
     try:
-        with tarfile.open(output_filename, "w:gz") as tar:
+        with tarfile.open(output_filename, "w:bz2") as tar:
             tar.add(source_dir, arcname=os.path.basename(source_dir))
         return True
     except Exception as ret_exc:
@@ -139,7 +139,7 @@ if __name__ == '__main__':
             # Check if it is a folder
             if os.path.isdir(folderToCompress):
                 logging.debug("Found valid folder: %s", folderToCompress)
-                archiveName = singleSubfolder + "-" + datetime.now().strftime("%Y%m%d_%H%M%S") + ".tar.gz"
+                archiveName = singleSubfolder + "-" + datetime.now().strftime("%Y%m%d_%H%M%S") + ".tar.bz2"
                 outputPath = os.path.join(TMP_DIR, archiveName)
                 if (MakeTar(folderToCompress, outputPath)):
                     logging.info("Succesfully compressed: [%s]", outputPath)
