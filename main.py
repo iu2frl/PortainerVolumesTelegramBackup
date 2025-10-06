@@ -1,6 +1,7 @@
 import os
 import logging
 from datetime import datetime
+import time
 import tarfile
 import telebot
 import requests
@@ -144,33 +145,76 @@ if __name__ == '__main__':
                 if (MakeTar(folderToCompress, outputPath)):
                     logging.info("Succesfully compressed: [%s]", outputPath)
                     # Send archive
-                    try:
-                        bot.send_document(TELEGRAM_DEST_CHAT, open(outputPath, 'rb'))
-                        logging.debug("Document: [%s] was sent succesfully", outputPath)
-                    except Exception as retEx:
-                        logging.error("Cannot send document: [%s]", retEx)
+                    sent = False
+                    for attempt in range(3):
                         try:
-                            bot.send_message(TELEGRAM_DEST_CHAT, "Cannot send document `" + outputPath + "`: [" + str(retEx) + "]")
-                        except Exception as sendEx:
-                            logging.error("Failed to send error message: [%s]", sendEx)
-                    # Delete archive
-                    try:
-                        os.remove(outputPath)
-                        logging.debug("File: [%s] was deleted succesfully", outputPath)
-                    except Exception as retEx:
-                        logging.error("Error while deleting: [%s]", retEx)
+                            with open(outputPath, 'rb') as f:
+                                bot.send_document(TELEGRAM_DEST_CHAT, f)
+                            logging.debug("Document: [%s] was sent succesfully", outputPath)
+                            sent = True
+                            break
+                        except Exception as retEx:
+                            error_str = str(retEx)
+                            if "413" in error_str or "Request Entity Too Large" in error_str:
+                                logging.error("Cannot send document: [%s]", retEx)
+                                try:
+                                    bot.send_message(TELEGRAM_DEST_CHAT, "Cannot send document `" + outputPath + "`: [" + str(retEx) + "]")
+                                except Exception as sendEx:
+                                    logging.error("Failed to send error message: [%s]", sendEx)
+                                break
+                            if attempt < 2:
+                                logging.warning("Failed to send document, retrying in 5 seconds... (%d/3)", attempt + 1)
+                                time.sleep(5)
+                            else:
+                                logging.error("Cannot send document after 3 attempts: [%s]", retEx)
+                                try:
+                                    bot.send_message(TELEGRAM_DEST_CHAT, "Cannot send document `" + outputPath + "`: [" + str(retEx) + "]")
+                                except Exception as sendEx:
+                                    logging.error("Failed to send error message: [%s]", sendEx)
+                    if sent:
+                        # Delete archive
+                        try:
+                            os.remove(outputPath)
+                            logging.debug("File: [%s] was deleted succesfully", outputPath)
+                        except Exception as retEx:
+                            logging.error("Error while deleting: [%s]", retEx)
                 else:
                     logging.error("Cannot compress: [%s]", outputPath)
-    try:
-        # Send log file
-        bot.send_document(TELEGRAM_DEST_CHAT, open(LOG_FILE_NAME, 'rb'))
-        logging.debug("Backup file sent")
-    except Exception as retEx:
-        logging.error("Error while sending log file: [%s]", retEx)
+    # Send log file
+    for attempt in range(3):
+        try:
+            with open(LOG_FILE_NAME, 'rb') as f:
+                bot.send_document(TELEGRAM_DEST_CHAT, f)
+            logging.debug("Backup file sent")
+            break
+        except Exception as retEx:
+            error_str = str(retEx)
+            if "413" in error_str or "Request Entity Too Large" in error_str:
+                logging.error("Error while sending log file: [%s]", retEx)
+                break
+            if attempt < 2:
+                logging.warning("Failed to send log file, retrying in 5 seconds... (%d/3)", attempt + 1)
+                time.sleep(5)
+            else:
+                logging.error("Error while sending log file after 3 attempts: [%s]", retEx)
 
     # Request and send Portainer backup
     if request_portainer_backup(PORTAINER_API_URL, PORTAINER_API_KEY, PORTAINER_BACKUP_FILE):
-        bot.send_document(TELEGRAM_DEST_CHAT, open(PORTAINER_BACKUP_FILE, 'rb'))
+        for attempt in range(3):
+            try:
+                with open(PORTAINER_BACKUP_FILE, 'rb') as f:
+                    bot.send_document(TELEGRAM_DEST_CHAT, f)
+                break
+            except Exception as retEx:
+                error_str = str(retEx)
+                if "413" in error_str or "Request Entity Too Large" in error_str:
+                    logging.error("Error while sending Portainer backup: [%s]", retEx)
+                    break
+                if attempt < 2:
+                    logging.warning("Failed to send Portainer backup, retrying in 5 seconds... (%d/3)", attempt + 1)
+                    time.sleep(5)
+                else:
+                    logging.error("Error while sending Portainer backup after 3 attempts: [%s]", retEx)
     else:
         bot.send_message(TELEGRAM_DEST_CHAT, "Failed to request Portainer backup")
         logging.error("Failed to request Portainer backup")
