@@ -10,9 +10,10 @@ This script scans the usual Docker Volumes path, compresses them to .tar.gz arch
 4. Configure the destination chat in `BOT_DEST` (for example: `export BOT_DEST="000000:aaaaaBBBBBccccc"`)
 5. (optional) Configure the volumes root path in `ROOT_DIR`
 6. (optional) Configure a temporary path in `TMP_DIR`
-7. Configure the Portainer API URL in `BACKUP_API_URL` (for example: `export BACKUP_API_URL="https://your-portainer-instance/api/backup"`)
-8. Configure the Portainer API key in `API_KEY` (for example: `export API_KEY="your-portainer-api-key"`)
-9. Execute the script `python3 ./main.py`
+7. (optional) Configure the maximum upload size (in MB) in `MAX_UPLOAD_SIZE` (defaults to `50`). Archives bigger than this are split into smaller parts before being sent
+8. Configure the Portainer API URL in `BACKUP_API_URL` (for example: `export BACKUP_API_URL="https://your-portainer-instance/api/backup"`)
+9. Configure the Portainer API key in `API_KEY` (for example: `export API_KEY="your-portainer-api-key"`)
+10. Execute the script `python3 ./main.py`
 
 ## Docker usage
 
@@ -67,9 +68,44 @@ ROOT_DIR=/var/snap/docker/common/var-lib-docker/volumes,/var/lib/docker/volumes,
 # Temporary directory for storing backups (optional)
 TMP_DIR=/tmp
 
+# Maximum upload size in MB (optional, defaults to 50)
+# Archives larger than this are split into <archive>.000, <archive>.001, ... parts
+# Recombine them at restore time with: cat <archive>.* > <archive>
+MAX_UPLOAD_SIZE=50
+
 # Portainer API URL for requesting backups
 BACKUP_API_URL=https://your-portainer-instance/api/backup
 
 # Portainer API key
 API_KEY=your-portainer-api-key
 ```
+
+## Restoring split archives
+
+When an archive exceeds `MAX_UPLOAD_SIZE`, it is split into sequential,
+zero-padded parts named `<archive>.000`, `<archive>.001`, `<archive>.002`, ...
+The parts are sent as separate Telegram documents.
+
+To restore, download all parts of the same archive into one folder and
+concatenate them back together in order (the numeric suffixes keep the
+correct order):
+
+### Linux / macOS
+
+```bash
+# Recombine the parts back into the original archive
+cat someService-20260624_020000.tar.xz.* > someService-20260624_020000.tar.xz
+
+# Then extract it
+tar -xf someService-20260624_020000.tar.xz
+```
+
+### Windows (PowerShell)
+
+```powershell
+# Recombine the parts back into the original archive
+Get-Content someService-20260624_020000.tar.xz.* -Raw -Encoding Byte | Set-Content someService-20260624_020000.tar.xz -Encoding Byte
+```
+
+> Note: archives that are smaller than `MAX_UPLOAD_SIZE` are sent as a single
+> file and do not need to be recombined.

@@ -80,6 +80,23 @@ if not PORTAINER_API_KEY:
     raise ValueError("Invalid API_KEY")
 logging.debug("API_KEY length: [%s]", len(PORTAINER_API_KEY))
 
+# Maximum upload size (in MB) for a single Telegram document.
+# Archives bigger than this are split into smaller parts before sending.
+MAX_UPLOAD_SIZE_MB = os.environ.get('MAX_UPLOAD_SIZE')
+if not MAX_UPLOAD_SIZE_MB:
+    MAX_UPLOAD_SIZE_MB = 50
+    logging.warning("MAX_UPLOAD_SIZE is empty, falling back to default: [%s] MB", MAX_UPLOAD_SIZE_MB)
+else:
+    try:
+        MAX_UPLOAD_SIZE_MB = int(MAX_UPLOAD_SIZE_MB)
+        if MAX_UPLOAD_SIZE_MB <= 0:
+            raise ValueError("MAX_UPLOAD_SIZE must be a positive integer")
+    except ValueError:
+        logging.error("MAX_UPLOAD_SIZE is not a valid positive integer, falling back to default: 50 MB")
+        MAX_UPLOAD_SIZE_MB = 50
+MAX_UPLOAD_SIZE = MAX_UPLOAD_SIZE_MB * 1024 * 1024
+logging.debug("MAX_UPLOAD_SIZE: [%s] MB ([%s] bytes)", MAX_UPLOAD_SIZE_MB, MAX_UPLOAD_SIZE)
+
 PORTAINER_BACKUP_FILE = os.path.join(TMP_DIR, "portainer_backup.tar.gz")
 logging.debug("PORTAINER_BACKUP_FILE: [%s]", PORTAINER_BACKUP_FILE)
 
@@ -94,7 +111,111 @@ def MakeTar(source_dir, output_filename):
         logging.error("Failed to compress [%s] to [%s]: [%s]", source_dir, output_filename, str(ret_exc))
         return False
 
-def request_portainer_backup(api_url, api_key, output_file):
+def split_file(file_path, chunk_size):
+    """Split a file into chunks of at most chunk_size bytes.
+
+    Parts are named "<file_path>.000", "<file_path>.001", ... (zero-padded,
+    in order). They can be recombined at restore time by concatenating them
+    in alphabetical/numerical order, e.g.:
+        cat archive.tar.xz.* > archive.tar.xz
+    Returns the list of generated part paths, or an empty list on failure.
+    """
+    part_paths = []
+    try:
+        with open(file_path, 'rb') as src:
+            index = 0
+            while True:
+                chunk = src.read(chunk_size)
+                if not chunk:
+                    break
+                part_path = "%s.%03d" % (file_path, index)
+                with open(part_path, 'wb') as dst:
+                    dst.write(chunk)
+                part_paths.append(part_path)
+                logging.debug("Created split part: [%s] (%d bytes)", part_path, len(chunk))
+                index += 1
+        return part_paths
+    except Exception as ret_exc:
+        logging.error("Failed to split [%s]: [%s]", file_path, str(ret_exc))
+        # Clean up any partial parts that were created
+        for part_path in part_paths:
+            try:
+                os.remove(part_path)
+            except OSError:
+                pass
+        return []
+
+def send_document_with_retries(file_path, attempts=3):
+    """Send a single file as a Telegram document, retrying on transient errors.
+
+    Returns True if the document was sent successfully, False otherwise.
+    """
+    for attempt in range(attempts):
+        try:
+            with open(file_path, 'rb') as f:
+                bot.send_document(TELEGRAM_DEST_CHAT, f)
+            logging.debug("Document: [%s] was sent succesfully", file_path)
+            return True
+        except Exception as retEx:
+            error_str = str(retEx)
+            if "413" in error_str or "Request Entity Too Large" in error_str:
+                logging.error("Cannot send document: [%s]", retEx)
+                try:
+                    bot.send_message(TELEGRAM_DEST_CHAT, "Cannot send document `" + file_path + "`: [" + str(retEx) + "]")
+                except Exception as sendEx:
+                    logging.error("Failed to send error message: [%s]", sendEx)
+                return False
+            if attempt < attempts - 1:
+                logging.warning("Failed to send document, retrying in 5 seconds... (%d/%d)", attempt + 1, attempts)
+                time.sleep(5)
+            else:
+                logging.error("Cannot send document after %d attempts: [%s]", attempts, retEx)
+                try:
+                    bot.send_message(TELEGRAM_DEST_CHAT, "Cannot send document `" + file_path + "`: [" + str(retEx) + "]")
+                except Exception as sendEx:
+                    logging.error("Failed to send error message: [%s]", sendEx)
+    return False
+
+def send_archive(file_path):
+    """Send a file to Telegram, splitting it into parts if it exceeds the
+    configured upload limit.
+
+    If the file is small enough it is sent as-is. Otherwise it is split into
+    "<file_path>.NNN" parts that are sent individually; each part is removed
+    after a successful send. Returns True only if the file (and all of its
+    parts) were sent successfully.
+    """
+    try:
+        file_size = os.path.getsize(file_path)
+    except OSError as ret_exc:
+        logging.error("Cannot get size of [%s]: [%s]", file_path, str(ret_exc))
+        return False
+
+    if file_size <= MAX_UPLOAD_SIZE:
+        return send_document_with_retries(file_path)
+
+    logging.info(
+        "Archive [%s] (%d bytes) exceeds upload limit (%d bytes), splitting into parts",
+        file_path, file_size, MAX_UPLOAD_SIZE
+    )
+    part_paths = split_file(file_path, MAX_UPLOAD_SIZE)
+    if not part_paths:
+        logging.error("Cannot split: [%s]", file_path)
+        return False
+
+    all_sent = True
+    for part_path in part_paths:
+        if send_document_with_retries(part_path):
+            try:
+                os.remove(part_path)
+                logging.debug("Part: [%s] was deleted succesfully", part_path)
+            except Exception as retEx:
+                logging.error("Error while deleting part [%s]: [%s]", part_path, retEx)
+        else:
+            all_sent = False
+    return all_sent
+
+
     """Request a backup from Portainer and save it to output_file"""
     try:
         headers = {
@@ -144,33 +265,8 @@ if __name__ == '__main__':
                 outputPath = os.path.join(TMP_DIR, archiveName)
                 if (MakeTar(folderToCompress, outputPath)):
                     logging.info("Succesfully compressed: [%s]", outputPath)
-                    # Send archive
-                    sent = False
-                    for attempt in range(3):
-                        try:
-                            with open(outputPath, 'rb') as f:
-                                bot.send_document(TELEGRAM_DEST_CHAT, f)
-                            logging.debug("Document: [%s] was sent succesfully", outputPath)
-                            sent = True
-                            break
-                        except Exception as retEx:
-                            error_str = str(retEx)
-                            if "413" in error_str or "Request Entity Too Large" in error_str:
-                                logging.error("Cannot send document: [%s]", retEx)
-                                try:
-                                    bot.send_message(TELEGRAM_DEST_CHAT, "Cannot send document `" + outputPath + "`: [" + str(retEx) + "]")
-                                except Exception as sendEx:
-                                    logging.error("Failed to send error message: [%s]", sendEx)
-                                break
-                            if attempt < 2:
-                                logging.warning("Failed to send document, retrying in 5 seconds... (%d/3)", attempt + 1)
-                                time.sleep(5)
-                            else:
-                                logging.error("Cannot send document after 3 attempts: [%s]", retEx)
-                                try:
-                                    bot.send_message(TELEGRAM_DEST_CHAT, "Cannot send document `" + outputPath + "`: [" + str(retEx) + "]")
-                                except Exception as sendEx:
-                                    logging.error("Failed to send error message: [%s]", sendEx)
+                    # Send archive (split into parts if it exceeds the upload limit)
+                    sent = send_archive(outputPath)
                     if sent:
                         # Delete archive
                         try:
@@ -200,21 +296,7 @@ if __name__ == '__main__':
 
     # Request and send Portainer backup
     if request_portainer_backup(PORTAINER_API_URL, PORTAINER_API_KEY, PORTAINER_BACKUP_FILE):
-        for attempt in range(3):
-            try:
-                with open(PORTAINER_BACKUP_FILE, 'rb') as f:
-                    bot.send_document(TELEGRAM_DEST_CHAT, f)
-                break
-            except Exception as retEx:
-                error_str = str(retEx)
-                if "413" in error_str or "Request Entity Too Large" in error_str:
-                    logging.error("Error while sending Portainer backup: [%s]", retEx)
-                    break
-                if attempt < 2:
-                    logging.warning("Failed to send Portainer backup, retrying in 5 seconds... (%d/3)", attempt + 1)
-                    time.sleep(5)
-                else:
-                    logging.error("Error while sending Portainer backup after 3 attempts: [%s]", retEx)
+        send_archive(PORTAINER_BACKUP_FILE)
     else:
         bot.send_message(TELEGRAM_DEST_CHAT, "Failed to request Portainer backup")
         logging.error("Failed to request Portainer backup")
