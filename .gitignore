@@ -3,3 +3,5 @@ venv/*
 *.env
 *.txt
 *.tar.gz
+*.tar.*
+*.zip
