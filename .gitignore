@@ -2,3 +2,4 @@ portainervolumestelegrambackup/*
 venv/*
 *.env
 *.txt
+*.tar.gz
