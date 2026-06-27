@@ -84,7 +84,7 @@ logging.debug("API_KEY length: [%s]", len(PORTAINER_API_KEY))
 # Archives bigger than this are split into smaller parts before sending.
 MAX_UPLOAD_SIZE_MB = os.environ.get('MAX_UPLOAD_SIZE')
 if not MAX_UPLOAD_SIZE_MB:
-    MAX_UPLOAD_SIZE_MB = 50
+    MAX_UPLOAD_SIZE_MB = 40
     logging.warning("MAX_UPLOAD_SIZE is empty, falling back to default: [%s] MB", MAX_UPLOAD_SIZE_MB)
 else:
     try:
@@ -92,8 +92,8 @@ else:
         if MAX_UPLOAD_SIZE_MB <= 0:
             raise ValueError("MAX_UPLOAD_SIZE must be a positive integer")
     except ValueError:
-        logging.error("MAX_UPLOAD_SIZE is not a valid positive integer, falling back to default: 50 MB")
-        MAX_UPLOAD_SIZE_MB = 50
+        logging.error("MAX_UPLOAD_SIZE is not a valid positive integer, falling back to default: 40 MB")
+        MAX_UPLOAD_SIZE_MB = 40
 MAX_UPLOAD_SIZE = MAX_UPLOAD_SIZE_MB * 1024 * 1024
 logging.debug("MAX_UPLOAD_SIZE: [%s] MB ([%s] bytes)", MAX_UPLOAD_SIZE_MB, MAX_UPLOAD_SIZE)
 
